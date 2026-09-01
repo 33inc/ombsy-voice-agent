@@ -36,20 +36,20 @@ def read_tunnel(process):
         line = process.stdout.readline()
         if not line:
             break
-        output = line.decode('utf-8').strip()
-        print(f"Cloudflared: {output}", flush=True)
-        if not url_found and "trycloudflare.com" in output:
+        output = line.decode('utf-8', errors='ignore').strip()
+        print(f"localhost.run: {output}", flush=True)
+        if not url_found and "tunneled with tls termination" in output:
             words = output.split()
             for word in words:
-                if word.startswith("https://") and "trycloudflare.com" in word:
+                if word.startswith("https://") and ".lhr.life" in word:
                     clean_url = word.strip("| ")
                     update_telnyx_webhook(clean_url)
                     url_found = True
 
 def main():
-    print("Starting Cloudflare Tunnel...")
+    print("Starting localhost.run Tunnel...")
     lt_process = subprocess.Popen(
-        [os.path.join(os.getcwd(), "cloudflared.exe"), "tunnel", "--url", "http://localhost:8000"],
+        ["ssh", "-o", "StrictHostKeyChecking=no", "-R", "80:127.0.0.1:8000", "nokey@localhost.run"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
     )
@@ -59,7 +59,7 @@ def main():
     t.start()
     
     # Wait a moment for it to establish
-    time.sleep(3)
+    time.sleep(5)
     
     print("\nStarting Voice Bot Server...")
     server_process = subprocess.Popen(

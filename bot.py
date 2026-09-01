@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from pipecat.serializers.telnyx import TelnyxFrameSerializer
+
 async def run_bot(websocket_client, stream_sid):
     transport = FastAPIWebsocketTransport(
         websocket=websocket_client,
@@ -27,6 +29,12 @@ async def run_bot(websocket_client, stream_sid):
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer(),
             vad_audio_passthrough=True,
+            serializer=TelnyxFrameSerializer(
+                stream_id=stream_sid,
+                outbound_encoding="PCMU",
+                inbound_encoding="PCMU",
+                auto_hang_up=False
+            )
         )
     )
 
@@ -53,7 +61,7 @@ async def run_bot(websocket_client, stream_sid):
         ]
     )
 
-    task = PipelineTask(pipeline, PipelineParams(allow_interruptions=True))
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
