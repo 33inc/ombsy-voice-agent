@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pipecat-ai[google,telnyx]==1.8.1
+python-dotenv
+loguru
+requests
