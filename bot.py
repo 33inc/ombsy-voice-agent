@@ -33,7 +33,7 @@ async def run_bot(websocket_client, stream_sid):
                 stream_id=stream_sid,
                 outbound_encoding="PCMU",
                 inbound_encoding="PCMU",
-                auto_hang_up=False
+                params=TelnyxFrameSerializer.InputParams(auto_hang_up=False)
             )
         )
     )
@@ -42,7 +42,7 @@ async def run_bot(websocket_client, stream_sid):
     # The Pipecat TelnyxTransport is usually a wrapper around standard websocket audio for Telnyx Media Streaming.
     
     llm = GeminiLiveLLMService(
-        api_key=os.getenv("GEMINI_API_KEY"),
+        api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY")),
         voice_id="Aoede", # Voice model
         system_instruction=(
             "You are an elite AI agent representing the Ombsy Capital Group. "
