@@ -37,7 +37,7 @@ genai.configure(api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KE
 telnyx.api_key = os.getenv("TELNYX_API_KEY")
 
 sms_model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="gemini-2.5-flash",
     system_instruction=(
         "You are Google Jules, operating as the elite 'Ombsy Receptionist' for the Ombsy Capital Group. "
         "You provide absolute best-in-class administrative support and client care via SMS. "
@@ -97,17 +97,30 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connection established with Telnyx.")
     
     try:
-        # Telnyx sends a start event first
-        msg = await websocket.receive_text()
-        data = json.loads(msg)
-        if data.get("event") == "start":
-            stream_id = data.get("start", {}).get("stream_id")
-            logger.info(f"Received start event for stream {stream_id}")
+        # Telnyx sends a start event first, but might send 'connected' before it.
+        stream_id = None
+        while True:
+            msg = await websocket.receive_text()
+            data = json.loads(msg)
+            event = data.get("event")
             
+            if event == "start":
+                stream_id = data.get("start", {}).get("stream_id")
+                logger.info(f"Received start event for stream {stream_id}")
+                break
+            elif event == "connected":
+                logger.info("Received connected event, waiting for start...")
+                continue
+            else:
+                logger.warning(f"Received unexpected event before start: {event}")
+                continue
+                
+        if stream_id:
             # Pass the actual live stream_id to Pipecat so it can route audio back properly!
             await run_bot(websocket, stream_id)
         else:
-            logger.error("First message was not a start event. Aborting.")
+            logger.error("Failed to extract stream_id.")
+            
     except Exception as e:
         logger.error(f"Error handling websocket: {e}")
     finally:
