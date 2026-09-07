@@ -70,12 +70,20 @@ async def telnyx_sms_webhook(request: Request):
             
             logger.info(f"Google Jules reply: {reply_text}")
             
-            # Send reply via Telnyx
-            telnyx.Message.create(
-                src=to_number,
-                dst=from_number,
-                text=reply_text
-            )
+            # Send reply via Telnyx REST API to avoid SDK version conflicts
+            import requests
+            headers = {
+                "Authorization": f"Bearer {os.getenv('TELNYX_API_KEY')}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            payload = {
+                "from": to_number,
+                "to": from_number,
+                "text": reply_text
+            }
+            res = requests.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
+            logger.info(f"Telnyx SMS send status: {res.status_code} {res.text}")
             
         return JSONResponse({"status": "ok"})
     except Exception as e:
