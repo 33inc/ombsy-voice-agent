@@ -88,11 +88,20 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established with Telnyx.")
     
-    # Run the Pipecat bot pipeline
     try:
-        await run_bot(websocket, "telnyx_stream")
+        # Telnyx sends a start event first
+        msg = await websocket.receive_text()
+        data = json.loads(msg)
+        if data.get("event") == "start":
+            stream_id = data.get("start", {}).get("stream_id")
+            logger.info(f"Received start event for stream {stream_id}")
+            
+            # Pass the actual live stream_id to Pipecat so it can route audio back properly!
+            await run_bot(websocket, stream_id)
+        else:
+            logger.error("First message was not a start event. Aborting.")
     except Exception as e:
-        logger.error(f"Error running pipecat bot: {e}")
+        logger.error(f"Error handling websocket: {e}")
     finally:
         logger.info("WebSocket disconnected.")
 
