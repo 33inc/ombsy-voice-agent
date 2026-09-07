@@ -4,7 +4,7 @@ import websockets
 async def test():
     print("Connecting...")
     try:
-        async with websockets.connect('ws://localhost:8000/ws') as ws:
+        async with websockets.connect('wss://ombsy-voice-agent.onrender.com/ws') as ws:
             print("Connected! Waiting for message...")
             res = await ws.recv()
             print("Received:", res)
