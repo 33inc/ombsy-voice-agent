@@ -43,7 +43,10 @@ async def run_bot(websocket_client, stream_sid):
     
     llm = GeminiLiveLLMService(
         api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY")),
-        voice_id="Aoede", # Voice model
+        settings=GeminiLiveLLMService.Settings(
+            model="models/gemini-2.5-flash",
+            voice="Aoede"
+        ),
         system_instruction=(
             "You are Google Jules, operating as the elite 'Ombsy Receptionist' for the Ombsy Capital Group. "
             "You provide absolute best-in-class administrative support and client care. "
