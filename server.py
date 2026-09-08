@@ -33,8 +33,15 @@ from google import genai
 from google.genai import types
 import telnyx
 
+# Restore global config for pipecat-ai (which relies on google.generativeai under the hood for Voice)
+try:
+    import google.generativeai as legacy_genai
+    legacy_genai.configure(api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY", "dummy_key_for_build")))
+except ImportError:
+    pass
+
 # Configure Gemini for SMS Agent
-gemini_client = genai.Client(api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY")))
+gemini_client = genai.Client(api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY", "dummy_key_for_build")))
 telnyx.api_key = os.getenv("TELNYX_API_KEY")
 
 # SMS Webhook endpoint
@@ -72,8 +79,8 @@ async def telnyx_sms_webhook(request: Request):
             
             logger.info(f"Google Jules reply: {reply_text}")
             
-            # Send reply via Telnyx REST API to avoid SDK version conflicts
-            import requests
+            # Send reply via Telnyx REST API (async to avoid blocking the event loop)
+            import httpx
             headers = {
                 "Authorization": f"Bearer {os.getenv('TELNYX_API_KEY')}",
                 "Content-Type": "application/json",
@@ -84,8 +91,9 @@ async def telnyx_sms_webhook(request: Request):
                 "to": from_number,
                 "text": reply_text
             }
-            res = requests.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
-            logger.info(f"Telnyx SMS send status: {res.status_code} {res.text}")
+            async with httpx.AsyncClient() as client:
+                res = await client.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
+                logger.info(f"Telnyx SMS send status: {res.status_code} {res.text}")
             
         return JSONResponse({"status": "ok"})
     except Exception as e:
@@ -127,8 +135,8 @@ async def telnyx_whatsapp_webhook(request: Request):
 
             logger.info(f"Google Jules WhatsApp reply: {reply_text}")
 
-            # Send reply via Telnyx REST API
-            import requests
+            # Send reply via Telnyx REST API (async to avoid blocking the event loop)
+            import httpx
             headers = {
                 "Authorization": f"Bearer {os.getenv('TELNYX_API_KEY')}",
                 "Content-Type": "application/json",
@@ -139,8 +147,9 @@ async def telnyx_whatsapp_webhook(request: Request):
                 "to": from_number,
                 "text": reply_text
             }
-            res = requests.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
-            logger.info(f"Telnyx WhatsApp send status: {res.status_code} {res.text}")
+            async with httpx.AsyncClient() as client:
+                res = await client.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
+                logger.info(f"Telnyx WhatsApp send status: {res.status_code} {res.text}")
 
         return JSONResponse({"status": "ok"})
     except Exception as e:
