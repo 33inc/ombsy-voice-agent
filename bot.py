@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 
-from pipecat.frames.frames import EndFrame, TextFrame
+from pipecat.frames.frames import EndFrame, TextFrame, LLMMessagesAppendFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -44,7 +44,7 @@ async def run_bot(websocket_client, stream_sid):
     llm = GeminiLiveLLMService(
         api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY")),
         settings=GeminiLiveLLMService.Settings(
-            model="models/gemini-2.5-flash",
+            model="models/gemini-2.5-flash-native-audio-latest",
             voice="Aoede"
         ),
         system_instruction=(
@@ -69,8 +69,12 @@ async def run_bot(websocket_client, stream_sid):
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
-        # Kick off the conversation
-        await task.queue_frames([TextFrame("Hello! Thank you for calling Ombsy Capital Group. How can I assist you today?")])
+        # Kick off the conversation by prompting Gemini to greet the caller
+        await task.queue_frames([
+            LLMMessagesAppendFrame([
+                {"role": "user", "content": "The user has just connected to the phone call. Please greet them warmly, state you are the Ombsy Receptionist, and ask how you can help them."}
+            ])
+        ])
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
