@@ -1,6 +1,8 @@
 import asyncio
 import websockets
+import pytest
 
+@pytest.mark.asyncio
 async def test():
     print("Connecting...")
     try:
@@ -10,5 +12,3 @@ async def test():
             print("Received:", res)
     except Exception as e:
         print("Error:", e)
-
-asyncio.run(test())
