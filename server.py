@@ -32,6 +32,11 @@ async def telnyx_webhook(request: Request):
 from google import genai
 from google.genai import types
 import telnyx
+import nacl.signing
+import nacl.encoding
+import nacl.exceptions
+import base64
+from fastapi import HTTPException
 
 # Restore global config for pipecat-ai (which relies on google.generativeai under the hood for Voice)
 try:
@@ -43,10 +48,31 @@ except ImportError:
 # Configure Gemini for SMS Agent
 gemini_client = genai.Client(api_key=os.getenv("Ombsy_Gemini_Brain", os.getenv("GEMINI_API_KEY", "dummy_key_for_build")))
 telnyx.api_key = os.getenv("TELNYX_API_KEY")
+TELNYX_PUBLIC_KEY = os.getenv("TELNYX_PUBLIC_KEY")
+
+async def verify_telnyx_webhook(request: Request):
+    if not TELNYX_PUBLIC_KEY:
+        # If no public key is configured, bypass validation (e.g. local dev)
+        return
+    body = await request.body()
+    signature_header = request.headers.get("telnyx-signature-ed25519")
+    timestamp_header = request.headers.get("telnyx-signature-ed25519-timestamp")
+    if not signature_header or not timestamp_header:
+        raise HTTPException(status_code=400, detail="Missing signature headers")
+    try:
+        verify_key = nacl.signing.VerifyKey(TELNYX_PUBLIC_KEY, encoder=nacl.encoding.Base64Encoder)
+        payload = timestamp_header.encode('utf-8') + b'|' + body
+        signature = base64.b64decode(signature_header)
+        verify_key.verify(payload, signature)
+    except nacl.exceptions.BadSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # SMS Webhook endpoint
 @app.post("/webhook/sms")
 async def telnyx_sms_webhook(request: Request):
+    await verify_telnyx_webhook(request)
     try:
         body = await request.json()
         data = body.get("data", {})
@@ -103,6 +129,7 @@ async def telnyx_sms_webhook(request: Request):
 # WhatsApp Webhook endpoint
 @app.post("/webhook/whatsapp")
 async def telnyx_whatsapp_webhook(request: Request):
+    await verify_telnyx_webhook(request)
     try:
         body = await request.json()
         data = body.get("data", {})
