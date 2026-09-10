@@ -69,6 +69,30 @@ async def verify_telnyx_webhook(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# Make.com Integration Helper
+async def send_to_make_webhook(channel: str, sender: str, incoming_text: str, ai_reply: str):
+    """
+    Sends the interaction data to the Make.com webhook so the user can
+    store records or trigger marketing/CRM workflows.
+    """
+    make_webhook_url = os.getenv("MAKE_WEBHOOK_URL")
+    if not make_webhook_url:
+        return
+
+    payload = {
+        "channel": channel,
+        "sender": sender,
+        "incoming_text": incoming_text,
+        "ai_reply": ai_reply
+    }
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            await client.post(make_webhook_url, json=payload)
+            logger.info(f"Interaction logged to Make.com via {channel}")
+    except Exception as e:
+        logger.error(f"Failed to send data to Make.com: {e}")
+
 # SMS Webhook endpoint
 @app.post("/webhook/sms")
 async def telnyx_sms_webhook(request: Request):
@@ -120,10 +144,115 @@ async def telnyx_sms_webhook(request: Request):
             async with httpx.AsyncClient() as client:
                 res = await client.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
                 logger.info(f"Telnyx SMS send status: {res.status_code} {res.text}")
+
+            # Log interaction to Make.com
+            await send_to_make_webhook("sms", from_number, text, reply_text)
             
         return JSONResponse({"status": "ok"})
     except Exception as e:
         logger.error(f"Error handling SMS webhook: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Email Webhook endpoint (e.g. SendGrid Inbound Parse)
+@app.post("/webhook/email")
+async def email_webhook(request: Request):
+    try:
+        # Example using SendGrid multipart/form-data
+        form = await request.form()
+        text = form.get("text", "")
+        from_email = form.get("from", "")
+        to_email = form.get("to", "")
+
+        if not text or not from_email:
+            return JSONResponse({"status": "ignored - no text or sender"})
+
+        logger.info(f"Received Email from {from_email}")
+
+        # Generate response via Google Jules (Gemini)
+        response = await gemini_client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=text,
+            config=types.GenerateContentConfig(
+                system_instruction=(
+                    "You are Google Jules, operating as the elite 'Ombsy Receptionist' for the Ombsy Capital Group. "
+                    "You provide absolute best-in-class administrative support and client care via Email. "
+                    "Your tone is warm, highly professional, accommodating, and efficient. "
+                    "You assist clients with queries regarding Tax Preparation, Credit Repair, Business Funding, Training, and Masterclass enrollments. "
+                    "Keep your responses concise but professional. "
+                    "Never hallucinate services outside of the Ombsy ecosystem. If you do not know the answer, politely inform them an executive will follow up."
+                )
+            )
+        )
+        reply_text = response.text.strip()
+
+        logger.info(f"Google Jules Email reply generated.")
+
+        # Here you would integrate with an Email API (like SendGrid) to send the reply_text back.
+        # For example, using httpx to hit the SendGrid Mail Send API.
+
+        # Log interaction to Make.com
+        await send_to_make_webhook("email", from_email, text, reply_text)
+
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        logger.error(f"Error handling Email webhook: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Facebook Messenger & Instagram Webhook endpoint (Meta Graph API)
+@app.get("/webhook/facebook")
+async def facebook_webhook_verify(request: Request):
+    # Meta verification step
+    verify_token = os.getenv("META_VERIFY_TOKEN", "ombsy_default_verify_token")
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+
+    if mode == "subscribe" and token == verify_token:
+        return Response(content=challenge, media_type="text/plain")
+    return JSONResponse({"error": "Invalid verification token"}, status_code=403)
+
+@app.post("/webhook/facebook")
+async def facebook_webhook_receive(request: Request):
+    try:
+        body = await request.json()
+
+        # Determine if it's a page or instagram webhook
+        if body.get("object") in ["page", "instagram"]:
+            for entry in body.get("entry", []):
+                for messaging_event in entry.get("messaging", []):
+                    sender_id = messaging_event.get("sender", {}).get("id")
+                    text = messaging_event.get("message", {}).get("text", "")
+
+                    if text:
+                        logger.info(f"Received Social Media Message from {sender_id}: {text}")
+
+                        # Generate response via Google Jules (Gemini)
+                        response = await gemini_client.aio.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=text,
+                            config=types.GenerateContentConfig(
+                                system_instruction=(
+                                    "You are Google Jules, operating as the elite 'Ombsy Receptionist' for the Ombsy Capital Group. "
+                                    "You provide absolute best-in-class administrative support and client care via Facebook and Instagram. "
+                                    "Your tone is warm, highly professional, accommodating, and efficient. "
+                                    "You assist clients with queries regarding Tax Preparation, Credit Repair, Business Funding, Training, and Masterclass enrollments. "
+                                    "Keep your responses concise, friendly, and use appropriate emojis. "
+                                    "Never hallucinate services outside of the Ombsy ecosystem. If you do not know the answer, politely inform them an executive will follow up."
+                                )
+                            )
+                        )
+                        reply_text = response.text.strip()
+
+                        logger.info(f"Google Jules Social Media reply: {reply_text}")
+
+                        # Here you would integrate with the Meta Graph API to send the reply_text back using the PAGE_ACCESS_TOKEN.
+
+                        # Log interaction to Make.com
+                        await send_to_make_webhook("social", sender_id, text, reply_text)
+
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        logger.error(f"Error handling Facebook webhook: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # WhatsApp Webhook endpoint
@@ -177,6 +306,9 @@ async def telnyx_whatsapp_webhook(request: Request):
             async with httpx.AsyncClient() as client:
                 res = await client.post("https://api.telnyx.com/v2/messages", headers=headers, json=payload)
                 logger.info(f"Telnyx WhatsApp send status: {res.status_code} {res.text}")
+
+            # Log interaction to Make.com
+            await send_to_make_webhook("whatsapp", from_number, text, reply_text)
 
         return JSONResponse({"status": "ok"})
     except Exception as e:
