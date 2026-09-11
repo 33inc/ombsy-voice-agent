@@ -29,6 +29,47 @@ async def telnyx_webhook(request: Request):
     logger.info("Incoming call received! Replying with TeXML to establish Media Stream...")
     return Response(content=texml, media_type="text/xml")
 
+from pydantic import BaseModel
+import requests
+
+class LeadData(BaseModel):
+    phone_number: str
+    name: str
+
+@app.post("/call-lead")
+async def call_lead(lead: LeadData, request: Request):
+    """
+    Endpoint for Make.com to trigger an outbound call to a new lead.
+    """
+    host = request.headers.get("host")
+    texml_url = f"https://{host}/webhook"
+    
+    headers = {
+        "Authorization": f"Bearer {os.getenv('TELNYX_API_KEY')}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    # We must use a verified Ombsy outbound number here.
+    # Assuming the first number associated with the account, or passing a default.
+    from_number = os.getenv("TELNYX_OUTBOUND_NUMBER", "+1234567890") 
+    
+    payload = {
+        "to": lead.phone_number,
+        "from": from_number,
+        "connection_id": os.getenv("TELNYX_CONNECTION_ID", ""),
+        "answering_machine_detection": "detect",
+        "answer_url": texml_url
+    }
+    
+    try:
+        res = requests.post("https://api.telnyx.com/v2/calls", headers=headers, json=payload)
+        logger.info(f"Triggered outbound call to {lead.phone_number}: {res.status_code}")
+        return JSONResponse({"status": "calling", "telnyx_response": res.json()})
+    except Exception as e:
+        logger.error(f"Error calling lead: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 import google.generativeai as genai
 import telnyx
 
