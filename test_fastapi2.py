@@ -1,0 +1,3 @@
+import inspect
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketInputTransport
+print(inspect.getsource(FastAPIWebsocketInputTransport))

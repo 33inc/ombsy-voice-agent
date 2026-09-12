@@ -4,7 +4,8 @@ pipecat-ai[google,telnyx]==1.8.1
 python-dotenv
 loguru
 requests
+
+aiohttp
 google-genai
-telnyx
 httpx
 pynacl

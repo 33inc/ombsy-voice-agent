@@ -63,7 +63,7 @@ def main():
     
     print("\nStarting Voice Bot Server...")
     server_process = subprocess.Popen(
-        ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+        [sys.executable, "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
     )
     
     try:
